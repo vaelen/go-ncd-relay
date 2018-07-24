@@ -28,12 +28,16 @@ SOFTWARE.
 package relay
 
 import (
+	"context"
 	"fmt"
 	"io"
 )
 
 // ErrInvalidResponse is returned when an invalid response was received from the relay controller
 var ErrInvalidResponse = fmt.Errorf("invalid response")
+
+// ErrTimedOut is returned when a command to the relay controller times out
+var ErrTimedOut = fmt.Errorf("timed out waiting for response")
 
 //////////////////////
 ///// Controller /////
@@ -56,27 +60,27 @@ func New(stream io.ReadWriter) *Controller {
 }
 
 // TurnOnRelay turns on the given relay using 1 based indexing
-func (c *Controller) TurnOnRelay(index uint16) error {
+func (c *Controller) TurnOnRelay(ctx context.Context, index uint16) error {
 	lsb := byte(index - 1)
 	msb := byte(index >> 8)
 	packet := CreatePacket([]byte{254, 48, lsb, msb})
-	return c.ExecuteCommand(packet)
+	return c.ExecuteCommand(ctx, packet)
 }
 
 // TurnOffRelay turns off the given relay using 1 based indexing
-func (c *Controller) TurnOffRelay(index uint16) error {
+func (c *Controller) TurnOffRelay(ctx context.Context, index uint16) error {
 	lsb := byte(index - 1)
 	msb := byte(index >> 8)
 	packet := CreatePacket([]byte{254, 47, lsb, msb})
-	return c.ExecuteCommand(packet)
+	return c.ExecuteCommand(ctx, packet)
 }
 
 // GetRelayStatus returns the current state of the given relay using 1 based indexing
-func (c *Controller) GetRelayStatus(index uint16) (bool, error) {
+func (c *Controller) GetRelayStatus(ctx context.Context, index uint16) (bool, error) {
 	lsb := byte(index - 1)
 	msb := byte(index >> 8)
 	packet := CreatePacket([]byte{254, 44, lsb, msb})
-	payload, err := c.ExecuteRead(packet, 1)
+	payload, err := c.ExecuteRead(ctx, packet, 1)
 	if err != nil {
 		return false, err
 	}
@@ -84,15 +88,15 @@ func (c *Controller) GetRelayStatus(index uint16) (bool, error) {
 }
 
 // SetBankStatus sets the current state of all 8 relays in a given bank at the same time
-func (c *Controller) SetBankStatus(bank uint8, status uint8) error {
+func (c *Controller) SetBankStatus(ctx context.Context, bank uint8, status uint8) error {
 	packet := CreatePacket([]byte{254, 140, status, bank})
-	return c.ExecuteCommand(packet)
+	return c.ExecuteCommand(ctx, packet)
 }
 
 // GetBankStatus returns the current state of all 8 relays in a given bank
-func (c *Controller) GetBankStatus(bank uint8) (uint8, error) {
+func (c *Controller) GetBankStatus(ctx context.Context, bank uint8) (uint8, error) {
 	packet := CreatePacket([]byte{254, 124, bank})
-	payload, err := c.ExecuteRead(packet, 1)
+	payload, err := c.ExecuteRead(ctx, packet, 1)
 	if err != nil {
 		return 0, err
 	}
@@ -100,20 +104,20 @@ func (c *Controller) GetBankStatus(bank uint8) (uint8, error) {
 }
 
 // TurnOnRelayByBank turns on the given relay in the given bank using 1 based indexing
-func (c *Controller) TurnOnRelayByBank(index uint8, bank uint8) error {
+func (c *Controller) TurnOnRelayByBank(ctx context.Context, index uint8, bank uint8) error {
 	packet := CreatePacket([]byte{254, 48, 107 + index, bank})
-	return c.ExecuteCommand(packet)
+	return c.ExecuteCommand(ctx, packet)
 }
 
 // TurnOffRelayByBank turns off the given relay in the given bank using 1 based indexing
-func (c *Controller) TurnOffRelayByBank(index uint8, bank uint8) error {
+func (c *Controller) TurnOffRelayByBank(ctx context.Context, index uint8, bank uint8) error {
 	packet := CreatePacket([]byte{254, 99 + index, bank})
-	return c.ExecuteCommand(packet)
+	return c.ExecuteCommand(ctx, packet)
 }
 
 // ExecuteCommand executes a command that does not return data
-func (c *Controller) ExecuteCommand(packet Packet) error {
-	response, err := c.sendCommand(packet, 4)
+func (c *Controller) ExecuteCommand(ctx context.Context, packet Packet) error {
+	response, err := c.sendCommand(ctx, packet, 4)
 	if err != nil {
 		return err
 	}
@@ -124,8 +128,8 @@ func (c *Controller) ExecuteCommand(packet Packet) error {
 }
 
 // ExecuteRead executes a command that returns data
-func (c *Controller) ExecuteRead(packet Packet, responseLength int) ([]byte, error) {
-	response, err := c.sendCommand(packet, responseLength+3)
+func (c *Controller) ExecuteRead(ctx context.Context, packet Packet, responseLength int) ([]byte, error) {
+	response, err := c.sendCommand(ctx, packet, responseLength+3)
 	if err != nil {
 		return nil, err
 	}
@@ -135,32 +139,46 @@ func (c *Controller) ExecuteRead(packet Packet, responseLength int) ([]byte, err
 	return response.Payload(), nil
 }
 
-func (c *Controller) sendCommand(packet Packet, responseLength int) (Packet, error) {
-	var bytesWritten int
-	var err error
-	bytesToWrite := packet
+func (c *Controller) sendCommand(ctx context.Context, packet Packet, responseLength int) (response Packet, err error) {
+	response = make([]byte, responseLength)
+	done := make(chan struct{})
 
-	for len(bytesToWrite) > 0 {
-		bytesWritten, err = c.stream.Write(bytesToWrite)
-		if err != nil {
-			return nil, err
+	go func() {
+		defer func() {
+			close(done)
+		}()
+		var bytesWritten int
+		bytesToWrite := packet
+
+		for len(bytesToWrite) > 0 {
+			bytesWritten, err = c.stream.Write(bytesToWrite)
+			if err != nil {
+				return
+			}
+			bytesToWrite = bytesToWrite[bytesWritten:]
 		}
-		bytesToWrite = bytesToWrite[bytesWritten:]
+
+		var bytesRead int
+		var totalBytesRead int
+
+		for totalBytesRead < responseLength {
+			bytesRead, err = c.stream.Read(response[totalBytesRead:])
+			if err != nil {
+				return
+			}
+			totalBytesRead += bytesRead
+		}
+	}()
+
+	select {
+	case <-done:
+		// Finished
+	case <-ctx.Done():
+		// Timed out
+		err = ErrTimedOut
 	}
 
-	var bytesRead int
-	var totalBytesRead int
-	response := make([]byte, responseLength)
-
-	for totalBytesRead < responseLength {
-		bytesRead, err = c.stream.Read(response[totalBytesRead:])
-		if err != nil {
-			return nil, err
-		}
-		totalBytesRead += bytesRead
-	}
-
-	return response, nil
+	return response, err
 }
 
 //////////////////
