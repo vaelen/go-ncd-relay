@@ -90,4 +90,32 @@ func main() {
 	}
 	log.Printf("Bank status: %08b\n", bankStatus)
 
+	// Read 1 AD in 8bit mode
+	ad8, err := controller.ReadAD8(ctx, 1)
+	if err != nil {
+		log.Fatalf("Couldn't read AD in 8bit mode: %v", err)
+	}
+	log.Printf("AD 8bit value: %d\n", ad8)
+
+	// Read all ADs in 8bit mode
+	allAD8, err := controller.ReadAllAD8(ctx)
+	if err != nil {
+		log.Fatalf("Couldn't read all ADs in 8bit mode: %v", err)
+	}
+	log.Printf("All ADs 8bit values: %v\n", allAD8)
+
+	// Read 1 AD in 10bit mode
+	ad10, err := controller.ReadAD8(ctx, 1)
+	if err != nil {
+		log.Fatalf("Couldn't read AD in 8bit mode: %v", err)
+	}
+	log.Printf("AD 10bit value: %d\n", ad10)
+
+	// Read all ADs in 10bit mode
+	allAD10, err := controller.ReadAllAD8(ctx)
+	if err != nil {
+		log.Fatalf("Couldn't read all ADs in 10bit mode: %v", err)
+	}
+	log.Printf("All ADs 10bit values: %v\n", allAD10)
+
 }
