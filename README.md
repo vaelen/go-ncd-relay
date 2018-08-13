@@ -119,7 +119,7 @@ func main() {
 	// Read 1 AD in 10bit mode
 	ad10, err := controller.ReadAD10(ctx, 1)
 	if err != nil {
-		log.Fatalf("Couldn't read AD in 8bit mode: %v", err)
+		log.Fatalf("Couldn't read AD in 10bit mode: %v", err)
 	}
 	log.Printf("AD 10bit value: %d\n", ad10)
 
