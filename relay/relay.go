@@ -133,17 +133,18 @@ func (c *Controller) ReadAllAD8(ctx context.Context) ([]uint8, error) {
 
 // ReadAD10 reads one of the AD channels with 10 bit granularity (0-1024)
 func (c *Controller) ReadAD10(ctx context.Context, channel uint8) (uint16, error) {
-	packet := CreatePacket([]byte{254, 149 + channel})
-	v, err := c.ExecuteRead(ctx, packet, 1)
+	packet := CreatePacket([]byte{254, 157 + channel})
+	v, err := c.ExecuteRead(ctx, packet, 2)
 	if err != nil || len(v) < 2 {
 		return 0, err
 	}
+
 	return parse10Bit(v), nil
 }
 
 // ReadAllAD10 reads all of the AD channels with 10 bit granularity (0-1024)
 func (c *Controller) ReadAllAD10(ctx context.Context) ([]uint16, error) {
-	packet := CreatePacket([]byte{254, 166})
+	packet := CreatePacket([]byte{254, 167})
 	v, err := c.ExecuteRead(ctx, packet, 16)
 	if err != nil || len(v) < 16 {
 		return nil, err

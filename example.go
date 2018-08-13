@@ -105,14 +105,14 @@ func main() {
 	log.Printf("All ADs 8bit values: %v\n", allAD8)
 
 	// Read 1 AD in 10bit mode
-	ad10, err := controller.ReadAD8(ctx, 1)
+	ad10, err := controller.ReadAD10(ctx, 1)
 	if err != nil {
 		log.Fatalf("Couldn't read AD in 8bit mode: %v", err)
 	}
 	log.Printf("AD 10bit value: %d\n", ad10)
 
 	// Read all ADs in 10bit mode
-	allAD10, err := controller.ReadAllAD8(ctx)
+	allAD10, err := controller.ReadAllAD10(ctx)
 	if err != nil {
 		log.Fatalf("Couldn't read all ADs in 10bit mode: %v", err)
 	}
