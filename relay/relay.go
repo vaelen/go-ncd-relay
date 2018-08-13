@@ -115,6 +115,50 @@ func (c *Controller) TurnOffRelayByBank(ctx context.Context, index uint8, bank u
 	return c.ExecuteCommand(ctx, packet)
 }
 
+// ReadAD8 reads one of the AD channels with 8 bit granularity (0-255)
+func (c *Controller) ReadAD8(ctx context.Context, channel uint8) (uint8, error) {
+	packet := CreatePacket([]byte{254, 149 + channel})
+	v, err := c.ExecuteRead(ctx, packet, 1)
+	if err != nil || len(v) < 1 {
+		return 0, err
+	}
+	return v[0], err
+}
+
+// ReadAllAD8 reads all of the AD channels with 8 bit granularity (0-255)
+func (c *Controller) ReadAllAD8(ctx context.Context) ([]uint8, error) {
+	packet := CreatePacket([]byte{254, 166})
+	return c.ExecuteRead(ctx, packet, 8)
+}
+
+// ReadAD10 reads one of the AD channels with 10 bit granularity (0-1024)
+func (c *Controller) ReadAD10(ctx context.Context, channel uint8) (uint16, error) {
+	packet := CreatePacket([]byte{254, 149 + channel})
+	v, err := c.ExecuteRead(ctx, packet, 1)
+	if err != nil || len(v) < 2 {
+		return 0, err
+	}
+	return parse10Bit(v), nil
+}
+
+// ReadAllAD10 reads all of the AD channels with 10 bit granularity (0-1024)
+func (c *Controller) ReadAllAD10(ctx context.Context) ([]uint16, error) {
+	packet := CreatePacket([]byte{254, 166})
+	v, err := c.ExecuteRead(ctx, packet, 16)
+	if err != nil || len(v) < 16 {
+		return nil, err
+	}
+	r := make([]uint16, 8)
+	for i := 0; i < 16; i += 2 {
+		r[i/2] = parse10Bit(v[i : i+2])
+	}
+	return r, nil
+}
+
+func parse10Bit(b []byte) uint16 {
+	return ((uint16(b[0]) & 3) << 8) + uint16(b[1])
+}
+
 // ExecuteCommand executes a command that does not return data
 func (c *Controller) ExecuteCommand(ctx context.Context, packet Packet) error {
 	response, err := c.sendCommand(ctx, packet, 4)
