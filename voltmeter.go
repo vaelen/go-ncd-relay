@@ -28,6 +28,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -68,9 +69,11 @@ func main() {
 
 	for {
 		allAD10 := read(controller)
-		i := allAD10[0]
-		v := float32(i) * V
-		log.Printf("%04d - %01.3fV\n", i, v)
+		allV := make([]string, len(allAD10))
+		for n, i := range allAD10 {
+			allV[n] = fmt.Sprintf("[%02d, %04d, %01.3fV]", n, i, float32(i) * V)
+		}
+		log.Println(allV)
 		time.Sleep(time.Millisecond * 10)
 	}
 
